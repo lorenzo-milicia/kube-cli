@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	tea "github.com/charmbracelet/bubbletea"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -13,7 +12,14 @@ import (
 	"time"
 )
 
-func kubernetesClientset() (*kubernetes.Clientset, error) {
+func getK8sConnection() (*kubernetes.Clientset, error) {
+	// To add a minimim spinner time
+	sleep := make(chan string)
+	go func(c chan string) {
+		time.Sleep(500 * time.Millisecond)
+		close(c)
+	}(sleep)
+
 	userHomeDir, err := os.UserHomeDir()
 	if err != nil {
 		fmt.Printf("error getting user home dir: %v\n", err)
@@ -26,24 +32,25 @@ func kubernetesClientset() (*kubernetes.Clientset, error) {
 		fmt.Printf("Error getting kubernetes config: %v\n", err)
 		return nil, err
 	}
+	<-sleep
+	k8s, err := kubernetes.NewForConfig(kubeConfig)
+	if err != nil {
 
-	return kubernetes.NewForConfig(kubeConfig)
+		return nil, err
+	}
+	return k8s, nil
 }
 
-func connectCmd() tea.Msg {
+func getNamespaces(k8s *kubernetes.Clientset) (*v1.NamespaceList, error) {
 	sleep := make(chan string)
 	go func(c chan string) {
-		time.Sleep(300 * time.Millisecond)
+		time.Sleep(500 * time.Millisecond)
 		close(c)
 	}(sleep)
-	cs, err := kubernetesClientset()
+	nl, err := k8s.CoreV1().Namespaces().List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
-		return errMsg(err)
+		return nil, err
 	}
 	<-sleep
-	return cs
-}
-
-func (m model) getNamespaces() (*v1.NamespaceList, error) {
-	return m.clientset.CoreV1().Namespaces().List(context.TODO(), metav1.ListOptions{})
+	return nl, nil
 }
