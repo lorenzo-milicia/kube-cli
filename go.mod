@@ -1,4 +1,4 @@
-module kube-cli
+module go.lorenzomilicia.dev/kube-cli
 
 go 1.20
 
