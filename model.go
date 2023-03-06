@@ -8,7 +8,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/lorenzo-milicia/bubbles/list"
-	operations "go.lorenzomilicia.dev/kube-gum-cli/ops"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
 )
@@ -30,14 +29,14 @@ type model struct {
 	kube              k8s
 	namespaceSelected bool
 	opSelection       list.Model
-	operations        []operations.NamespaceOperation
+	operations        []NamespaceOperation
 	selectedOperation string
 	operationSelected bool
 	operationOutput   string
 	error             errMsg
 }
 
-func initialModel(ops []operations.NamespaceOperation) model {
+func initialModel(ops []NamespaceOperation) model {
 	s := spinner.New()
 	s.Spinner = spinner.Line
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#CD931A"))
@@ -115,7 +114,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		})
 	case itemsLoadedMsg:
 		m.itemsLoaded = true
-	case operations.KubernetesOperationMsg:
+	case KubernetesOperationMsg:
 		m.operationOutput = msg.View
 	}
 
@@ -161,7 +160,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, tea.Quit
 				}
 				m.operationSelected = true
-				var op operations.NamespaceOperation
+				var op NamespaceOperation
 				for _, o := range m.operations {
 					if o.Name == string(i) {
 						op = o
