@@ -1,9 +1,8 @@
-module go.lorenzomilicia.dev/kube-gum-cli
+module kube-cli
 
 go 1.20
 
 replace github.com/charmbracelet/bubbles v0.15.0 => /home/lorenzo/dev/go/src/github.com/charmbracelet/bubbles
-
 require (
 	github.com/charmbracelet/bubbles v0.15.0
 	github.com/charmbracelet/bubbletea v0.23.2

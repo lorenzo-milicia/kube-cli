@@ -59,8 +59,17 @@ func loadItems(m *model) tea.Cmd {
 }
 
 func filteringView(m model) string {
-	if !m.itemsLoaded || m.done {
+	if !m.itemsLoaded || m.namespaceSelected {
 		return ""
 	}
 	return m.filtering.View()
+}
+
+func operationsView(m model) string {
+	if !m.namespaceSelected {
+		return ""
+	}
+	s := fmt.Sprintf("You chose... %s\n", m.choice)
+
+	return s + m.opSelection.View()
 }

@@ -1,12 +1,14 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/lorenzo-milicia/bubbles/list"
+	operations "go.lorenzomilicia.dev/kube-gum-cli/ops"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
 )
@@ -19,17 +21,23 @@ type k8s struct {
 }
 
 type model struct {
-	loading      spinner.Model
-	filtering    list.Model
-	choice       string
-	connected    bool
-	itemsFetched bool
-	itemsLoaded  bool
-	kube         k8s
-	done         bool
+	loading           spinner.Model
+	filtering         list.Model
+	choice            string
+	connected         bool
+	itemsFetched      bool
+	itemsLoaded       bool
+	kube              k8s
+	namespaceSelected bool
+	opSelection       list.Model
+	operations        []operations.NamespaceOperation
+	selectedOperation string
+	operationSelected bool
+	operationOutput   string
+	error             errMsg
 }
 
-func initialModel() model {
+func initialModel(ops []operations.NamespaceOperation) model {
 	s := spinner.New()
 	s.Spinner = spinner.Line
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#CD931A"))
@@ -57,7 +65,26 @@ func initialModel() model {
 
 	l.FilterInput = ti
 
-	return model{loading: s, kube: k8s{}, connected: false, itemsFetched: false, filtering: l, done: false}
+	var o []list.Item
+	for _, op := range ops {
+		fmt.Printf("op: %v\n", op)
+		o = append(o, op)
+	}
+
+	oi := list.New(o, itemDelegate{}, defaultWidth, 15)
+
+	oi.Title = "Select an operation"
+
+	return model{
+		loading:           s,
+		kube:              k8s{},
+		connected:         false,
+		itemsFetched:      false,
+		filtering:         l,
+		namespaceSelected: false,
+		operations:        ops,
+		opSelection:       oi,
+	}
 }
 
 func (m model) Init() tea.Cmd {
@@ -68,6 +95,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 	switch msg := msg.(type) {
 	case errMsg:
+		m.error = msg
 		return m, tea.Quit
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -87,6 +115,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		})
 	case itemsLoadedMsg:
 		m.itemsLoaded = true
+	case operations.KubernetesOperationMsg:
+		m.operationOutput = msg.View
 	}
 
 	if !m.itemsFetched {
@@ -94,7 +124,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.loading = s
 		cmds = append(cmds, cmd)
 	}
-	if m.itemsLoaded {
+	if m.itemsLoaded && !m.namespaceSelected {
 		switch msg := msg.(type) {
 		case tea.WindowSizeMsg:
 			m.filtering.SetWidth(msg.Width)
@@ -106,12 +136,42 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if ok {
 					m.choice = string(i)
 				}
-				m.done = true
-				return m, tea.Quit
+				m.namespaceSelected = true
+				return m, nil
 			}
 		}
 		var cmd tea.Cmd
 		m.filtering, cmd = m.filtering.Update(msg)
+		cmds = append(cmds, cmd)
+	}
+	if m.namespaceSelected {
+		switch msg := msg.(type) {
+		case tea.WindowSizeMsg:
+			m.opSelection.SetWidth(msg.Width)
+
+		case tea.KeyMsg:
+			switch keypress := msg.String(); keypress {
+			case "enter":
+				i, ok := m.opSelection.SelectedItem().(item)
+				if ok {
+					m.selectedOperation = string(i)
+				}
+				if string(i) == "" {
+					m.error = errMsg(errors.New("no operations present"))
+					return m, tea.Quit
+				}
+				m.operationSelected = true
+				var op operations.NamespaceOperation
+				for _, o := range m.operations {
+					if o.Name == string(i) {
+						op = o
+					}
+				}
+				return m, op.Command(m.kube.clientset, m.choice)
+			}
+		}
+		var cmd tea.Cmd
+		m.opSelection, cmd = m.opSelection.Update(msg)
 		cmds = append(cmds, cmd)
 	}
 
@@ -123,8 +183,10 @@ func (m model) View() string {
 	s += clusterConnectionView(m)
 	s += namespacesFetchView(m)
 	s += filteringView(m)
-	if m.done {
-		s += fmt.Sprintf("You chose... %s\n", m.choice)
+	s += operationsView(m)
+	if m.error != nil {
+		s += fmt.Sprintf("Error: %v", m.error)
 	}
+	s += m.operationOutput
 	return s
 }
